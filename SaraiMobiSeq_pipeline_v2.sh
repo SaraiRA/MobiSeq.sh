@@ -346,6 +346,39 @@ if [ ! -e .map.rhino ]; then
   touch .map.rhino
 fi
 
+##### QUALITY CONTROL ##### 
+# Quality control, to ensurethat we are getting reasonable coverage and data out of the fecal samples.
+
+
+#Depth of Coverage
+echo "Depth of coverage"
+# -p: no error if existing 
+mkdir -p $DEPTH && cd $DEPTH
+
+### COLLAPSED READS 
+
+#INPUT: *_primer_noAdap.collapsed.gz and  *_primer_noAdap.collapsed.truncated.gz
+
+## SINE
+SINEBAM=$DEPTH/SINE
+mkdir -p $SINEBAM
+cd $SINEBAM
+if [ ! -e .depth ]; then
+	## Run samtools bedcov
+	# Reports the total read base count (i.e. the sum of per base read depths) for each genomic region specified in the supplied BED file. The regions are output as they appear in the BED file and are 0-based. Counts for each alignment file supplied are reported in separate columns. 
+  	for f in $MAP/SINE/*_MEcollapsed.markdup.bam
+  		do
+    		bn=$(basename $f _MEcollapsed.markdup.bam)
+    		# Run bwa mem and then sort then sort the bam by coordinates.
+		# M: mark shorter split hits as secondary
+    		echo "(samtools bedcov $ALBA/SINE.90pct.collapsed.bed $f > ${bn}_SUMdepth.txt)"
+  	done | xsbatch -c 1 --mem-per-cpu=5G -J sine -R --max-array-jobs=10 --
+  touch .depth
+fi
+
+
+
+
 
 
 
