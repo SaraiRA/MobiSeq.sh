@@ -30,12 +30,24 @@ MAP=$PROJECT/mapping
 ADAPTER=$PROJECT/adapRem
 ANGSD=$PROJECT/angsd
 WOLFGENOME=/groups/hologenomics/data/genomes/wolf/L.Dalen_14_wolf.scf.noHets.fasta
-DEPTH=$PROJECT/depth
 ALBA=$PROJECT/albaFiles
 ALBAMAP=/groups/hologenomics/ariglesi/data/MobiSeq_wolf_popgen/mapping/
-DEPTHTISSUE=$PROJECT/depth_tissue
 FREBAM=/groups/hologenomics/fmfava/data/wolfproject/subset_highCoverage/
-DEPTHFRE=$PROJECT/depth_frederikke
+
+DEPTHS=$PROJECT/depths
+
+DEPTHLOCI=$DEPTHS/loci
+DEPTH=$DEPTHS/depth
+DEPTHTISSUE=$DEPTHS/depth_tissue
+DEPTHFRE=$DEPTHLOCI/depth_frederikke
+
+DEPTHSNP=$DEPTHS/snp
+DEPTHSNPFECAL=$DEPTHSNP/fecal
+DEPTHSNPTISSUE=$DEPTHSNP/tissue
+
+## Define file variables
+
+
 
 ##### MERGING #####
 #Merging files of the same lane 
@@ -315,10 +327,10 @@ fi
 
 
 
-##### QUALITY CONTROL ##### 
+############################### QUALITY CONTROL ################################ 
 
+######## DEPTH OF LOCI #########
 ###DEPTH FECAL SAMPLES 
-
 # Quality control, to ensure that we are getting reasonable coverage and data out of the fecal samples.
 #Index files first by script
 #./index.sh *.bam
@@ -384,7 +396,7 @@ if [ ! -e .depth ]; then
 fi
 
 ### DEPTH TISSUE SAMPLES
-
+#*rg.realigned.bam
 #Depth of Coverage
 echo "Depth of coverage"
 # -p: no error if existing 
@@ -427,7 +439,18 @@ if [ ! -e .depth ]; then
 fi
 
 
-### DEPTH SUBSET_FRE 
+### DEPTH SUBSET_FREDERIKA
+
+#No run
+#convert sam to bam
+for f in $(ls *.sam)
+do 
+	bn=$(basename $f .sam)
+	samtools view -Sb $f > ${bn}.bam
+done
+
+#Index bam 
+./index.sh *.bam
 
 #Depth of Coverage
 echo "Depth of coverage"
@@ -435,7 +458,6 @@ echo "Depth of coverage"
 mkdir -p $DEPTHFRE && cd $DEPTHFRE
 
 ## SINE
-#short bed: awk '{print $1 "\t" $2 "\t" $3}' SINE.90pct.collapsed.bed > SINE.90pct.collapsed_correct.bed
 if [ ! -e .depth ]; then
 	## Run samtools bedcov
 	# Reports the total read base count (i.e. the sum of per base read depths) for each genomic region specified in the supplied BED file. The regions are output as they appear in the BED file and are 0-based. Counts for each alignment file supplied are reported in separate columns. 
@@ -448,6 +470,91 @@ if [ ! -e .depth ]; then
   	done | xsbatch -c 1 --mem-per-cpu=5G -J sine -R --max-array-jobs=10 --
   touch .depth
 fi
+
+
+######## DEPTH OF SNP #########
+
+######Fecal
+#Depth of Coverage for the SNPs
+echo "Depth of coverage for the SNPs"
+# -p: no error if existing 
+mkdir -p $DEPTHSNPFECAL && cd $DEPTHSNPFECAL
+
+## SINE
+SINEDEPTHSNPFECAL=$DEPTHSNPFECAL/SINE
+mkdir -p $SINEDEPTHSNPFECAL && cd $SINEDEPTHSNPFECAL
+if [ ! -e .depth ]; then
+	## Run samtools bedcov
+	# Reports the total read base count (i.e. the sum of per base read depths) for each genomic region specified in the supplied BED file. The regions are output as they appear in the BED file and are 0-based. Counts for each alignment file supplied are reported in separate columns. 
+  	for f in $MAP/SINE/*_MEcollapsed.markdup.bam
+  		do
+    		bn=$(basename $f _MEcollapsed.markdup.bam)
+    		# Run bwa mem and then sort then sort the bam by coordinates.
+		# M: mark shorter split hits as secondary
+    		echo "(samtools bedcov $ALBA/SNPsPos_SINE-merged.mafs.bed  $f > ${bn}_SNPdepth.txt)"
+  	done | xsbatch -c 1 --mem-per-cpu=5G -J sine -R --max-array-jobs=10 --
+  touch .depth
+fi
+
+## LINE
+LINEDEPTHSNPFECAL=$DEPTHSNPFECAL/LINE
+mkdir -p $LINEDEPTHSNPFECAL && cd $LINEDEPTHSNPFECAL
+if [ ! -e .depth ]; then
+	## Run samtools bedcov
+	# Reports the total read base count (i.e. the sum of per base read depths) for each genomic region specified in the supplied BED file. The regions are output as they appear in the BED file and are 0-based. Counts for each alignment file supplied are reported in separate columns. 
+  	for f in $MAP/LINE/*_MEcollapsed.markdup.bam
+  		do
+    		bn=$(basename $f _MEcollapsed.markdup.bam)
+    		# Run bwa mem and then sort then sort the bam by coordinates.
+		# M: mark shorter split hits as secondary
+    		echo "(samtools bedcov $ALBA/SNPsPos_LINE-merged.mafs.bed  $f > ${bn}_SNPdepth.txt)"
+  	done | xsbatch -c 1 --mem-per-cpu=2G -J line -R --max-array-jobs=10 --
+  touch .depth
+fi
+
+
+######Tissue
+#Depth of Coverage for the SNPs
+echo "Depth of coverage for the SNPs"
+# -p: no error if existing 
+
+mkdir -p $DEPTHSNPTISSUE && cd $DEPTHSNPTISSUE
+
+## SINE
+SINEDEPTHSNPTISSUE=$DEPTHSNPTISSUE/SINE
+mkdir -p $SINEDEPTHSNPTISSUE && cd $SINEDEPTHSNPTISSUE
+if [ ! -e .depth ]; then
+	## Run samtools bedcov
+	# Reports the total read base count (i.e. the sum of per base read depths) for each genomic region specified in the supplied BED file. The regions are output as they appear in the BED file and are 0-based. Counts for each alignment file supplied are reported in separate columns. 
+  	for f in $ALBAMAP/SINE_collapsed/*_ME.collapsed.markdup.90pct.rg.realigned.bam
+  		do
+    		bn=$(basename $f _ME.collapsed.markdup.90pct.rg.realigned.bam)
+    		# Run bwa mem and then sort then sort the bam by coordinates.
+		# M: mark shorter split hits as secondary
+    		echo "(samtools bedcov $ALBA/SNPsPos_SINE-merged.mafs.bed  $f > ${bn}_SNPdepth.txt)"
+  	done | xsbatch -c 1 --mem-per-cpu=5G -J sineT -R --max-array-jobs=10 --
+  touch .depth
+fi
+
+## LINE
+
+LINEDEPTHSNPTISSUE=$DEPTHSNPTISSUE/LINE
+mkdir -p $LINEDEPTHSNPTISSUE && cd $LINEDEPTHSNPTISSUE
+if [ ! -e .depth ]; then
+	## Run samtools bedcov
+	# Reports the total read base count (i.e. the sum of per base read depths) for each genomic region specified in the supplied BED file. The regions are output as they appear in the BED file and are 0-based. Counts for each alignment file supplied are reported in separate columns. 
+  	for f in $ALBAMAP/LINE_collapsed/*_ME.collapsed.markdup.90pct.rg.realigned.bam
+  		do
+    		bn=$(basename $f _ME.collapsed.markdup.90pct.rg.realigned.bam)
+    		# Run bwa mem and then sort then sort the bam by coordinates.
+		# M: mark shorter split hits as secondary
+    		echo "(samtools bedcov $ALBA/SNPsPos_LINE-merged.mafs.bed  $f > ${bn}_SUMdepth.txt)"
+  	done | xsbatch -c 1 --mem-per-cpu=2G -J lineT -R --max-array-jobs=10 --
+  touch .depth
+fi
+
+
+
 
 
 
