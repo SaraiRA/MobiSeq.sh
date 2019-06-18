@@ -458,16 +458,34 @@ echo "Depth of coverage"
 mkdir -p $DEPTHFRE && cd $DEPTHFRE
 
 ## SINE
+SINEDEPTHFRE=$DEPTHFRE/SINE
+mkdir -p $SINEDEPTHFRE && cd $SINEDEPTHFRE
 if [ ! -e .depth ]; then
 	## Run samtools bedcov
 	# Reports the total read base count (i.e. the sum of per base read depths) for each genomic region specified in the supplied BED file. The regions are output as they appear in the BED file and are 0-based. Counts for each alignment file supplied are reported in separate columns. 
-  	for f in $FREBAM/*.bam
+  	for f in $DEPTHFRE/*.bam;
   		do
     		bn=$(basename $f .bam)
     		# Run bwa mem and then sort then sort the bam by coordinates.
 		# M: mark shorter split hits as secondary
 		echo "(samtools bedcov $ALBA/SINE.90pct.collapsed_correct.bed  $f > ${bn}_SUMdepth.txt)"
-  	done | xsbatch -c 1 --mem-per-cpu=5G -J sine -R --max-array-jobs=10 --
+  	done | xsbatch -c 1 --mem-per-cpu=2G -J sine -R --max-array-jobs=10 --
+  touch .depth
+fi
+
+## LINE
+LINEDEPTHFRE=$DEPTHFRE/LINE
+mkdir -p $LINEDEPTHFRE && cd $LINEDEPTHFRE
+if [ ! -e .depth ]; then
+	## Run samtools bedcov
+	# Reports the total read base count (i.e. the sum of per base read depths) for each genomic region specified in the supplied BED file. The regions are output as they appear in the BED file and are 0-based. Counts for each alignment file supplied are reported in separate columns. 
+  	for f in $DEPTHFRE/*.bam
+  		do
+    		bn=$(basename $f .bam)
+    		# Run bwa mem and then sort then sort the bam by coordinates.
+		# M: mark shorter split hits as secondary
+		echo "(samtools bedcov $ALBA/LINE.90pct.collapsed_correct.bed  $f > ${bn}_SUMdepth.txt)"
+  	done | xsbatch -c 1 --mem-per-cpu=2G -J line -R --max-array-jobs=10 --
   touch .depth
 fi
 
