@@ -29,6 +29,7 @@ STATS=$PROJECT/stats
 MAP=$PROJECT/mapping
 ADAPTER=$PROJECT/adapRem
 ANGSD=$PROJECT/angsd
+PCA=$PROJECT/pca
 WOLFGENOME=/groups/hologenomics/data/genomes/wolf/L.Dalen_14_wolf.scf.noHets.fasta
 ALBA=$PROJECT/albaFiles
 ALBAMAP=/groups/hologenomics/ariglesi/data/MobiSeq_wolf_popgen/mapping/
@@ -573,7 +574,235 @@ fi
 
 
 
+######################### CALL SUBSET OF VARIANTS ############################
 
+mkdir -p $ANGSD
+cd $ANGSD
+
+LINEVAR=$ANGSD/LINE
+mkdir -p $LINEVAR
+SINEVAR=$ANGSD/SINE
+mkdir -p $SINEVAR
+
+LINEBAM=$MAP/LINE
+cd $LINEVAR
+awk '{print $1"\t"$2+1"\t"$3}' $ALBA/SNPsPos_LINE-merged.mafs.bed > SNPsPos_LINE-merged.mafs.angsd
+angsd sites index SNPsPos_LINE-merged.mafs.angsd
+if [ ! -e .angsd.done ]; then
+  ## Make a file with the list of bams that should be used for the variant calling
+  ls $LINEBAM/*MEcollapsed.markdup.bam > LINE.bamlist
+  ## Use angsd, with min qual 30, min map qual 30,
+  ## use GL 1 model (samtools genotype likelihood model), compute mafs, filter
+  ## for snps with a p-value of 1e-6, get major minor alleles, output a beagle file
+  ## and remove individuals with depth less than 3, and remove sites with less than
+  ## 50% inds that are retained (in this case 50% of 10 = 5 samples), no
+  ## unknownEM, frequency using -doMaf 2 
+  echo "angsd -bam LINE.bamlist -minq 30 -minmapq 30 -GL 1 -doMaf 2 -SNP_pval 1e-6 -doMajorMinor 1 -doglf 2 -minIndDepth 3 -sites SNPsPos_LINE-merged.mafs.angsd  -out LINE.allSamples" | xsbatch -c 1 --mem-per-cpu=2G --
+  touch .angsd.done
+fi
+
+SINEBAM=$MAP/SINE
+cd $SINEVAR
+awk '{print $1"\t"$2+1"\t"$3}' $ALBA/SNPsPos_SINE-merged.mafs.bed > SNPsPos_SINE-merged.mafs.angsd
+angsd sites index SNPsPos_SINE-merged.mafs.angsd
+if [ ! -e .angsd.done ]; then
+  ls $SINEBAM/*MEcollapsed.markdup.bam > SINE.bamlist
+  echo "angsd -bam SINE.bamlist -minq 30 -minmapq 30 -GL 1 -doMaf 2 -SNP_pval 1e-6 -doMajorMinor 1 -doglf 2 -minIndDepth 3 -sites SNPsPos_SINE-merged.mafs.angsd -out SINE.allSamples" | xsbatch -c 1 --mem-per-cpu=2G --
+  touch .angsd.done
+fi
+
+## Angsd variant calling in progress. Wait before doing the next steps.
+echo "Angsd variant calling jobs launched, wait for them to finish before proceeding. Press Ctrl+C to 1 times to exit. Any other key will continue"
+read dummy
+
+
+######################### PCA ############################
+
+
+##### PCA ONLY FECAL SAMPLES ######
+mkdir -p $PCA 
+cd $PCA
+
+## PCA/MDS - matrix
+# -doIBS = Print a single base from each indiviudal at each position, 1 means that it random sampled read
+# -bam = It's a bam file that is read
+# -docounts = method requeres counting the different bases at each position
+# -minInd = Only keep sites with at least minIndDepth from at least 63 individuals
+# -uniqueOnly = Remove read that have multiple best hits, 1 means remove
+# -minQ = minimum base quality score
+# -minMapQ = minimum mapQ quality
+# -out = Output file
+# -makeMatrix = prints out the pairwise IBS matrix. This is the avg. distance between pairs of indiviudals.
+# -doCov = print out the covariance matrix which can be used for PCA.
+# -doMajorMinor = Inferred minor and major allele from likelihood
+# -GL = Genotype likelihood, 1 mean the SAMtools model
+# -minFreq = Minimum minor allel frequency based on the sampled bases
+# -setMaxDepth = Discard site if total sequencing depth (all individuals added together) is above 10000
+# -minIndDepth = Change the minimum depth the individuals must have in order to keep site
+
+# LINE
+angsd  -doIBS 1 -bam $ANGSD/LINE/LINE.bamlist  -docounts 1 -minInd 5  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalPCA_5ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/LINE/LINE.bamlist  -docounts 1 -minInd 4  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalPCA_4ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/LINE/LINE.bamlist  -docounts 1 -minInd 3  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalPCA_3ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+#SINE
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 15  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_15ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 14  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_14ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 13  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_13ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 12  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_12ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 11  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_11ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 10  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_10ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 9  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_9ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 8  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_8ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 7  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_7ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+
+
+## PCA Albas subset
+
+
+# LINE
+#No selecting mininimum of individuals, beacuse they were already selected by Alba
+angsd  -doIBS 1 -bam $ANGSD/LINE/LINE.bamlist  -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalPCA_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/LINE/LINE.bamlist  -docounts 1 -minInd 5  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalPCA_5ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/LINE/LINE.bamlist  -docounts 1 -minInd 4  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalPCA_4ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/LINE/LINE.bamlist  -docounts 1 -minInd 3  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalPCA_3ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+
+#SINE
+#No selecting mininimum of individuals, beacuse they were already selected by Alba
+angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 15  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_15ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 14  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_14ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 13  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_13ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 12  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_12ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 11  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_11ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 10  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_10ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 9  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_9ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 8  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_8ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 7  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_7ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 6  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_6ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 5  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_5ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 4  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_4ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 3  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_3ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+#angsd  -doIBS 1 -bam $ANGSD/SINE/SINE.bamlist  -docounts 1 -minInd 2  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalPCA_2ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd &
+
+
+##### PCA WITH TISSUE DATA #####
+
+#tissue data
+ls $ALBAMAP/LINE_collapsed/*_ME.collapsed.markdup.90pct.rg.realigned.bam > LINEtissue.bamlist
+ls $ALBAMAP/SINE_collapsed/*_ME.collapsed.markdup.90pct.rg.realigned.bam > SINEtissue.bamlist
+
+#bothfecal and tissue
+cat $ANGSD/LINE/LINE.bamlist LINEtissue.bamlist > LINEtissueFecal.bamlist
+cat $ANGSD/SINE/SINE.bamlist SINEtissue.bamlist > SINEtissueFecal.bamlist
+
+# All SNPs
+# LINE
+# 100%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 86  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_86ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+# ~90%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 77  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_77ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+# ~80%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 69  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_69ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+# ~50%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 43  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_43ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+# ~20%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 17  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_17ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+
+#SINE
+# 100%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 105  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_105ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+# ~90%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 95  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_95ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+# ~80%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 84  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_84ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+# ~50%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 53  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_53ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+# ~20%
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 21  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_21ind -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 &
+
+
+### Alba sites
+# LINE
+#No selecting mininimum of individuals, beacuse they were already selected by Alba
+angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+
+# 100%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 86  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_86ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+# ~90%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 77  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_77ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+# ~80%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 69  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_69ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+# ~50%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 43  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_43ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+# ~20%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam LINEtissue.bamlist  -docounts 1 -minInd 17  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_17ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+
+
+#SINE
+#No selecting mininimum of individuals, beacuse they were already selected by Alba
+angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+
+# 100%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 105  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_105ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+# ~90%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 95  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_95ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+# ~80%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 84  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_84ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+# ~50%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 53  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_53ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+# ~20%
+#xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_collapsed -p hologenomics -n 1 -N 1 -- angsd  -doIBS 1 -bam SINEtissueFecal.bamlist  -docounts 1 -minInd 21  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_21ind_AlbaSites -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd &
+
+
+
+##### Count numbr of sites #####
+# NO RUN I DID IT IN R
+
+## Fecal data
+# LINE_fecalPCA_4ind.ibs.gz
+#Nan values
+
+#SINE_fecalPCA_12ind.ibs.gz
+for i in 5 6 7; do   
+zcat SINE_fecalPCA_12ind.ibs.gz | awk -v i="$i" '{if ($i==0 || $i== 1){print $3}}' | wc -l ; 
+done
+
+# Forget this part, I did it in R
+
+
+######################### PROCRUSTE ANALYSIS ############################
+
+# Wikipedia definition: An orthogonal Procrustes problem is a method which can be used to find out the optimal rotation and/or reflection (i.e., the optimal orthogonal linear transformation) for the Procrustes Superimposition (PS) of an object with respect to another.
 
 
 
