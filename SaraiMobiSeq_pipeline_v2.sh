@@ -46,15 +46,14 @@ DEPTHSNP=$DEPTHS/snp
 DEPTHSNPFECAL=$DEPTHSNP/fecal
 DEPTHSNPTISSUE=$DEPTHSNP/tissue
 
-## Define file variables
 
-
-
+###################### PRE-PROCESSING ##########################
 ##### MERGING #####
-#Merging files of the same lane 
-#Dont run with the rest of the pipeline
+# Merging files of the same lane 
+# Dont run with the rest of the pipeline
 
 echo "Merge file of the same line"
+
 # -p: no error if existing 
 mkdir -p $FASTQ && cd $FASTQ
 
@@ -802,9 +801,78 @@ done
 
 ######################### PROCRUSTE ANALYSIS ############################
 
-# Wikipedia definition: An orthogonal Procrustes problem is a method which can be used to find out the optimal rotation and/or reflection (i.e., the optimal orthogonal linear transformation) for the Procrustes Superimposition (PS) of an object with respect to another.
+# Wikipedia definition: An orthogonal Procrustes problem is a method which can be used to find out the optimal rotation and/or reflection 
+# We will calculate the covMat for the tissue samples and add one by one of the fecal samples and after procruste in 
+
+# I created manually my bam list
+
+########## FECAL AND TISSUE SAMPLES ##########
 
 
+### DE NOVO CALL OF SNPs
+
+# LINE
+for i in {1..5}
+do
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_$i -p hologenomics -- angsd  -doIBS 1 -bam LINEtissueFecal.sample${i}.bamlist -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_${i} -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3
+done
+
+# SINE
+for i in {1..15}
+do
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_SINE -p hologenomics -- angsd  -doIBS 1 -bam SINEtissueFecal.sample${i}.bamlist -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_${i} -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3
+done
+
+### DESCRIBED SNPs
+# LINE
+for i in {1..5}
+do
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCAD_$i -p hologenomics -- angsd  -doIBS 1 -bam LINEtissueFecal.sample${i}.bamlist -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_DescribedSNPs_${i} -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd 
+done
+
+# SINE
+for i in {1..15}
+do
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCAD_SINE_$i -p hologenomics -- angsd  -doIBS 1 -bam SINEtissueFecal.sample${i}.bamlist -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_DescribedSNPs_${i} -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd 
+done
+
+
+### Original PCAs
+#Forget to do it for the original
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_0 -p hologenomics -- angsd  -doIBS 1 -bam LINEtissueFecal.sample0.bamlist -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_0 -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3
+
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCA_SINE -p hologenomics -- angsd  -doIBS 1 -bam SINEtissueFecal.sample0.bamlist -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_0 -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3
+
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCAD_0 -p hologenomics -- angsd  -doIBS 1 -bam LINEtissueFecal.sample0.bamlist -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out LINE_fecalTissuePCA_DescribedSNPs_0 -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/LINE/SNPsPos_LINE-merged.mafs.angsd 
+
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=2G -J PCAD_SINE_0 -p hologenomics -- angsd  -doIBS 1 -bam SINEtissueFecal.sample0.bamlist -docounts 1  -uniqueOnly 1  -minQ 30 -minMapQ 30 -out SINE_fecalTissuePCA_DescribedSNPs_0 -makeMatrix 1 -doCov 1 -doMajorMinor 1 -GL 1 -minFreq 0.05 -setMaxDepth 10000 -minIndDepth 3 -sites $ANGSD/SINE/SNPsPos_SINE-merged.mafs.angsd 
+
+
+########################## F3 ANALYSIS  ##################################
+
+#### Call SNPs and generate vcf and PLINK file
+# I am also generating some extra files, in case to bee need them
+# -minInd: Only keep sites with at least minIndDepth from at least 63 individuals
+# -GL: Genotype likelihood, 1 mean the SAMtools model
+# -minQ: minimum base quality score
+# -minMapQ: minimum mapQ quality
+# -minFreq: Minimum minor allel frequency based on the sampled bases
+# -minIndDepth: Change the minimum depth the individuals must have in order to keep site
+# -doCov: print out the covariance matrix which can be used for PCA (see below). You should use the -minFreq option to avoid sites with low allele frequency.
+# -doMajorMinor: The covariance matrix can only be calculated for diallelic sites. Therefore, choose a methods for selecting the major and minor allele
+# -doMaf 1: 1 Known major, and Known minor. Here both the major and minor allele is assumed to be known 
+# -doIBS: Print a single base from each indiviudal at each position, 1 means that it random sampled read
+# -doGlf 1: Output the log genotype likelihoods to a file,  binary all 10 log genotype likelihood 
+# -doPost 1: Calculate posterior prob 3xgprob, using frequency as prior
+# -doGeno 4: print the called genotype as AA, AC, AG, ...
+# -doPlink 2: print the called genotype as -1,0,1,2 
+# -doHaploCall 2:  most frequent base
+# -doVcf 1: do vcf
+# -doCounts 1:-doHaploCalls needs allele counts (use -doCounts 1)
+
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=5G -J angsd -p  -- angsd -minInd 4 -GL 1 -minQ 30 -minMapQ 30 -minFreq 0.05 -minIndDepth 3 -bam LINE.bamlist -out LINE_fecalandDanish -doCov 1 -doMajorMinor 1 -doMaf 1 -doIBS 2 -doGlf 1 -doPost 1 -doGeno 4 -doPlink 2 -doHaploCall 2 -doVcf 1 -doCounts 1
+
+xsbatch -c 1 --time=01-00:00:00 --mem-per-cpu=5G -J angsd -p  -- angsd -minInd 4 -GL 1 -minQ 30 -minMapQ 30 -minFreq 0.05 -minIndDepth 3 -bam SINE.bamlist -out SINE_fecalandDanish -doCov 1 -doMajorMinor 1 -doMaf 1 -doIBS 2 -doGlf 1 -doPost 1 -doGeno 4 -doPlink 2 -doHaploCall 2 -doVcf 1 -doCounts 1
 
 
 
